@@ -21,7 +21,15 @@
 - 安全与导入导出
   - 导入导出使用 AES-256-CBC + HMAC-SHA256 加密，PBKDF2 派生密钥（见 `utils/EncryptionUtils.cs`）
 - 模型适配
-  - 已适配国产模型：DeepSeek、Kimi、ChatGLM、MiniMax 的最新旗舰模型；支持自定义 BaseUrl / ApiKey / 参数
+  - 已适配国产模型：Qwen、DeepSeek、Kimi、ChatGLM、MiniMax 的最新旗舰模型；支持自定义 BaseUrl / ApiKey / 参数
+
+#### OpenAI API配置注意事项
+
+不同于通过OpenAI SDK（例如Python的from openai import OpenAI）进行模型访问，本项目是直接通过HTTP访问，因此base_url有所不同。
+
+以Qwen为例，通过OpenAI SDK进行访问，base_url应当设置为`https://dashscope.aliyuncs.com/compatible-mode/v1`，
+而本项目是通过HTTP访问，base_url应当设置为`https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions`
+
 
 ### 运行截图（示意）
 - 功能区按钮：打开侧边栏、模型列表、提示词设置、文档管理、日志开关
