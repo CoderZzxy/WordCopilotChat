@@ -7,11 +7,13 @@ using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Office.Interop.Word;
 using Newtonsoft.Json;
+using WordCopilotChat.utils;
+
 
 // 使用别名解决命名冲突
 using TaskAsync = System.Threading.Tasks.Task;
 
-namespace WordCopilotChat.utils
+namespace WordCopilot.utils
 {
     /// <summary>
     /// Word文档操作工具类，为AI Agent提供Word相关功能
@@ -258,7 +260,30 @@ namespace WordCopilotChat.utils
                     return JsonConvert.SerializeObject(new { headings = new object[0], hasMore = false, total = 0 });
                 }
 
-                // 直接使用OutlineLevel属性获取标题（分页获取，高效且准确）
+                // 如果pageSize很大（>1000），说明用户希望一次性加载所有标题，使用简化的快速方法
+                if (pageSize > 1000)
+                {
+                    Debug.WriteLine("检测到大pageSize，使用快速一次性获取所有标题...");
+                    var startTime = System.Diagnostics.Stopwatch.StartNew();
+                    
+                    var allHeadings = GetHeadingsUsingOutlineLevel(doc, cancellationToken);
+                    
+                    startTime.Stop();
+                    Debug.WriteLine($"快速获取完成 - 总标题数: {allHeadings.Count}, 耗时: {startTime.ElapsedMilliseconds}ms");
+
+                    var result = new
+                    {
+                        headings = allHeadings,
+                        hasMore = false,
+                        total = allHeadings.Count,
+                        page = 0,
+                        pageSize = allHeadings.Count
+                    };
+
+                    return JsonConvert.SerializeObject(result, Formatting.None);
+                }
+
+                // 正常分页获取
                 Debug.WriteLine("使用OutlineLevel属性分页获取标题...");
                 var pagedResult = GetHeadingsUsingOutlineLevelPaged(doc, page, pageSize, cancellationToken);
 
@@ -272,7 +297,7 @@ namespace WordCopilotChat.utils
 
                 Debug.WriteLine($"分页结果 - 总数: {totalCount}, 当前页: {pagedHeadings.Count}, 还有更多: {hasMore}");
 
-                var result = new
+                var result2 = new
                 {
                     headings = pagedHeadings,
                     hasMore = hasMore,
@@ -281,7 +306,7 @@ namespace WordCopilotChat.utils
                     pageSize = pageSize
                 };
 
-                return JsonConvert.SerializeObject(result, Formatting.None);
+                return JsonConvert.SerializeObject(result2, Formatting.None);
             }
             catch (OperationCanceledException)
             {
@@ -1296,6 +1321,127 @@ namespace WordCopilotChat.utils
             return sb.ToString().TrimEnd();
         }
 
+        // 清除范围内的软回车（手动换行符）
+        private static void RemoveManualLineBreaksInRange(dynamic range)
+        {
+            try
+            {
+                if (range == null) return;
+
+                Debug.WriteLine("开始清除软回车（手动换行符）");
+
+                // 保存当前选择位置
+                dynamic wordApp = range.Application;
+                dynamic originalSelection = wordApp.Selection.Range;
+                int originalStart = originalSelection.Start;
+                int originalEnd = originalSelection.End;
+
+                // 创建Find对象，在指定范围内查找
+                dynamic find = range.Find;
+                find.ClearFormatting();
+                find.Replacement.ClearFormatting();
+
+                // 设置查找软回车（^l 在Word中表示手动换行符）
+                find.Text = "^l";
+                find.Replacement.Text = " "; // 替换为空格，避免词语连在一起
+                find.Forward = true;
+                find.Wrap = 0; // wdFindStop = 0, 不循环查找，只在range内查找
+                find.Format = false;
+                find.MatchCase = false;
+                find.MatchWholeWord = false;
+                find.MatchWildcards = false;
+
+                // 执行全部替换（wdReplaceAll = 2）
+                int replaceCount = 0;
+                bool found = true;
+                
+                // 循环替换，直到没有找到为止
+                while (found)
+                {
+                    try
+                    {
+                        found = find.Execute(
+                            FindText: Type.Missing,
+                            MatchCase: Type.Missing,
+                            MatchWholeWord: Type.Missing,
+                            MatchWildcards: Type.Missing,
+                            MatchSoundsLike: Type.Missing,
+                            MatchAllWordForms: Type.Missing,
+                            Forward: Type.Missing,
+                            Wrap: Type.Missing,
+                            Format: Type.Missing,
+                            ReplaceWith: Type.Missing,
+                            Replace: 2 // wdReplaceAll = 2
+                        );
+                        
+                        if (found)
+                        {
+                            replaceCount++;
+                            if (replaceCount > 1000) // 防止无限循环
+                            {
+                                Debug.WriteLine("软回车清除次数超过1000次，可能存在异常，停止清除");
+                                break;
+                            }
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        Debug.WriteLine($"清除软回车时出错: {ex.Message}");
+                        break;
+                    }
+                }
+
+                if (replaceCount > 0)
+                {
+                    Debug.WriteLine($"已清除 {replaceCount} 个软回车");
+                }
+                else
+                {
+                    Debug.WriteLine("未发现软回车");
+                }
+
+                // 清理连续的空格（软回车替换后可能产生）
+                try
+                {
+                    find.ClearFormatting();
+                    find.Replacement.ClearFormatting();
+                    find.Text = "  "; // 两个空格
+                    find.Replacement.Text = " "; // 替换为一个空格
+                    find.Forward = true;
+                    find.Wrap = 0;
+                    
+                    // 循环替换连续空格
+                    while (find.Execute(
+                        FindText: Type.Missing,
+                        MatchCase: Type.Missing,
+                        MatchWholeWord: Type.Missing,
+                        MatchWildcards: Type.Missing,
+                        MatchSoundsLike: Type.Missing,
+                        MatchAllWordForms: Type.Missing,
+                        Forward: Type.Missing,
+                        Wrap: Type.Missing,
+                        Format: Type.Missing,
+                        ReplaceWith: Type.Missing,
+                        Replace: 2
+                    )) { }
+                }
+                catch { }
+
+                // 恢复原始选择位置
+                try
+                {
+                    wordApp.Selection.SetRange(originalStart, originalEnd);
+                }
+                catch { }
+
+                Debug.WriteLine("软回车清除完成");
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"RemoveManualLineBreaksInRange 失败: {ex.Message}");
+            }
+        }
+
         // 规范化插入后的范围：
         // - 统一段前后距为0，行距为单倍
         // - 移除多余空段落（只保留最后一个空段，若 keepOneTrailingEmpty 为 true）
@@ -1304,6 +1450,9 @@ namespace WordCopilotChat.utils
             try
             {
                 if (range == null) return;
+
+                // 首先清除所有软回车（手动换行符）
+                RemoveManualLineBreaksInRange(range);
 
                 dynamic paragraphs = range.Paragraphs;
                 if (paragraphs == null) return;
@@ -4243,12 +4392,38 @@ namespace WordCopilotChat.utils
                     var segs = fromMark.Split(new[] { '\r', '\n' }, StringSplitOptions.None);
                     var tbl = new StringBuilder();
                     int cut = -1;
+                    bool hasEmptyLine = false;
+                    
                     for (int i = 0; i < segs.Length; i++)
                     {
                         var line = segs[i].Trim();
-                        if (string.IsNullOrWhiteSpace(line)) continue;
-                        if (line.Contains("|")) { tbl.AppendLine(line); }
-                        else { cut = i; break; }
+                        
+                        // 遇到空行标记，但继续检查下一行
+                        if (string.IsNullOrWhiteSpace(line))
+                        {
+                            hasEmptyLine = true;
+                            continue;
+                        }
+                        
+                        // 如果之前遇到过空行，且当前行不是表格行，说明表格结束
+                        if (hasEmptyLine && !line.Contains("|"))
+                        {
+                            cut = i;
+                            break;
+                        }
+                        
+                        // 如果当前行包含竖线，认为是表格行
+                        if (line.Contains("|"))
+                        {
+                            tbl.AppendLine(line);
+                            hasEmptyLine = false; // 重置空行标记
+                        }
+                        else
+                        {
+                            // 遇到非表格行，表格结束
+                            cut = i;
+                            break;
+                        }
                     }
                     tableContent = tbl.ToString();
                     if (cut >= 0 && cut < segs.Length)
@@ -4278,13 +4453,50 @@ namespace WordCopilotChat.utils
 
                             // 表格主体：header + sep + 其后数据行（同一行或多行）
                             string afterSep = content.Substring(sepMatch.Index + sepMatch.Length).TrimStart();
-                            int lastPipe = afterSep.LastIndexOf('|');
-                            string rowsChunk = afterSep;
-                            afterTable = "";
-                            if (lastPipe >= 0)
+                            
+                            // 逐行提取表格数据行，直到遇到非表格行
+                            var sepLines = afterSep.Split(new[] { '\r', '\n' }, StringSplitOptions.None);
+                            var rowsBuilder = new StringBuilder();
+                            int cutIndex = -1;
+                            bool hasEmptyLine = false;
+                            
+                            for (int i = 0; i < sepLines.Length; i++)
                             {
-                                rowsChunk = afterSep.Substring(0, lastPipe + 1);
-                                afterTable = afterSep.Substring(lastPipe + 1).Trim();
+                                var line = sepLines[i].Trim();
+                                
+                                // 遇到空行标记，但继续检查下一行
+                                if (string.IsNullOrWhiteSpace(line))
+                                {
+                                    hasEmptyLine = true;
+                                    continue;
+                                }
+                                
+                                // 如果之前遇到过空行，且当前行不是表格行，说明表格结束
+                                if (hasEmptyLine && !line.Contains("|"))
+                                {
+                                    cutIndex = i;
+                                    break;
+                                }
+                                
+                                // 如果当前行包含竖线，认为是表格行
+                                if (line.Contains("|"))
+                                {
+                                    rowsBuilder.AppendLine(line);
+                                    hasEmptyLine = false; // 重置空行标记
+                                }
+                                else
+                                {
+                                    // 遇到非表格行，表格结束
+                                    cutIndex = i;
+                                    break;
+                                }
+                            }
+                            
+                            string rowsChunk = rowsBuilder.ToString();
+                            afterTable = "";
+                            if (cutIndex >= 0 && cutIndex < sepLines.Length)
+                            {
+                                afterTable = string.Join("\n", sepLines.Skip(cutIndex)).Trim();
                             }
 
                             string compact = headerRow + "\n" + sepRow + "\n" + rowsChunk;
@@ -4303,12 +4515,38 @@ namespace WordCopilotChat.utils
                                 var lines = from.Split(new[] { '\r', '\n' }, StringSplitOptions.None);
                                 var tbl = new StringBuilder();
                                 int cut = -1;
+                                bool hasEmptyLine = false;
+                                
                                 for (int i = 0; i < lines.Length; i++)
                                 {
                                     var line = lines[i].Trim();
-                                    if (string.IsNullOrWhiteSpace(line)) continue;
-                                    if (line.Contains("|")) { tbl.AppendLine(line); }
-                                    else { cut = i; break; }
+                                    
+                                    // 遇到空行标记，但继续检查下一行
+                                    if (string.IsNullOrWhiteSpace(line))
+                                    {
+                                        hasEmptyLine = true;
+                                        continue;
+                                    }
+                                    
+                                    // 如果之前遇到过空行，且当前行不是表格行，说明表格结束
+                                    if (hasEmptyLine && !line.Contains("|"))
+                                    {
+                                        cut = i;
+                                        break;
+                                    }
+                                    
+                                    // 如果当前行包含竖线，认为是表格行
+                                    if (line.Contains("|"))
+                                    {
+                                        tbl.AppendLine(line);
+                                        hasEmptyLine = false; // 重置空行标记
+                                    }
+                                    else
+                                    {
+                                        // 遇到非表格行，表格结束
+                                        cut = i;
+                                        break;
+                                    }
                                 }
                                 tableContent = tbl.ToString();
                                 if (cut >= 0 && cut < lines.Length)
@@ -4360,7 +4598,17 @@ namespace WordCopilotChat.utils
                 {
                     range.InsertAfter("\r\n\r\n");
                     range.Collapse(0);
-                    InsertParagraphContent(range, afterTable, indentLevel);
+                    
+                    // 递归处理：如果afterTable中还包含表格，继续使用InsertMixedContent
+                    if (ContainsTableStructure(afterTable))
+                    {
+                        Debug.WriteLine("检测到afterTable中还包含表格，递归处理");
+                        InsertMixedContent(range, afterTable, indentLevel);
+                    }
+                    else
+                    {
+                        InsertParagraphContent(range, afterTable, indentLevel);
+                    }
                 }
 
                 Debug.WriteLine("=== 混合内容插入完成 ===");

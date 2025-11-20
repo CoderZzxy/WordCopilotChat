@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using System.Windows.Forms;
+using WordCopilot.utils;
 
 namespace WordCopilotChat
 {
@@ -65,7 +66,7 @@ namespace WordCopilotChat
             {
                 // 仅当勾选时才开启日志存储；默认未勾选（关闭），以节省磁盘空间
                 bool enabled = this.checkBoxLog.Checked;
-                WordCopilotChat.utils.OpenAIUtils.EnableLogging = enabled;
+                OpenAIUtils.EnableLogging = enabled;
             }
             catch (Exception ex)
             {

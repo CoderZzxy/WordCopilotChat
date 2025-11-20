@@ -121,7 +121,7 @@ namespace WordCopilotChat.services
                     new AppSettings
                     {
                         SettingKey = "agent_max_tokens",
-                        SettingValue = "40000",
+                        SettingValue = "8192",
                         Description = "Agent模式最大令牌数",
                         DataType = "int",
                         CreatedAt = DateTime.Now,
@@ -303,7 +303,7 @@ namespace WordCopilotChat.services
             {
                 return (
                     GetDoubleSetting("agent_temperature", 0.7),
-                    GetIntSetting("agent_max_tokens", 4000),
+                    GetIntSetting("agent_max_tokens", 8192),
                     GetDoubleSetting("agent_top_p", 0.9)
                 );
             }

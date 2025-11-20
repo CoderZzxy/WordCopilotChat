@@ -32,7 +32,7 @@ namespace WordCopilotChat
                 
                 // 加载Agent模式参数
                 nudAgentTemp.Value = (decimal)_appSettingsService.GetDoubleSetting("agent_temperature", 0.7);
-                nudAgentMaxTokens.Value = _appSettingsService.GetIntSetting("agent_max_tokens", 40000);
+                nudAgentMaxTokens.Value = _appSettingsService.GetIntSetting("agent_max_tokens", 8192);
                 nudAgentTopP.Value = (decimal)_appSettingsService.GetDoubleSetting("agent_top_p", 0.9);
                 
                 System.Diagnostics.Debug.WriteLine("默认参数设置已加载");
@@ -89,7 +89,7 @@ namespace WordCopilotChat
                 nudChatTopP.Value = 0.8m;
                 
                 nudAgentTemp.Value = 0.7m;
-                nudAgentMaxTokens.Value = 40000;
+                nudAgentMaxTokens.Value = 8192;
                 nudAgentTopP.Value = 0.9m;
             }
         }

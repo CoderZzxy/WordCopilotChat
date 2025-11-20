@@ -13,7 +13,7 @@ using System.IO;
 
 using System.Diagnostics;
 
-namespace WordCopilotChat.utils
+namespace WordCopilot.utils
 {
     // 工具定义类
     public class Tool
@@ -39,7 +39,7 @@ namespace WordCopilotChat.utils
     {
         public string Role { get; set; }
         public string Content { get; set; }
-        
+
         [JsonProperty("tool_calls")]
         public List<ToolCall> ToolCalls { get; set; }
     }
@@ -48,17 +48,17 @@ namespace WordCopilotChat.utils
     {
         public string Id { get; set; }
         public string Type { get; set; }
-        
+
         [JsonProperty("function")]
         public ToolFunction Function { get; set; }
-        
+
         // 兼容性属性，映射到Function.Name
         public string Name => Function?.Name;
-        
+
         // 兼容性属性，映射到Function.Arguments  
         public object Parameters => Function?.Arguments;
     }
-    
+
     public class ToolFunction
     {
         public string Name { get; set; }
@@ -69,16 +69,15 @@ namespace WordCopilotChat.utils
     {
         // 工具链支持
         private static readonly List<Tool> _tools = new List<Tool>();
-        
+
         // 工具预览事件
         public static event Action<JObject> OnToolPreviewReady;
 
         // 工具调用进度事件
         public static event Action<string> OnToolProgress;
-        
+
         // 全局日志开关（默认关闭，节省磁盘）：仅当为 true 时才写入 openai_requests / openai_errors 日志
         public static bool EnableLogging { get; set; } = false;
-
 
         // 用户数据根目录：C:\Users\<User>\.WordCopilotChat
         private static string GetUserDataRoot()
@@ -97,8 +96,6 @@ namespace WordCopilotChat.utils
             }
         }
 
-
-
         // 保存请求到文件用于Postman调试
         private static void SaveRequestForPostman(string baseUrl, string apiKey, JObject requestBody, string tag)
         {
@@ -109,27 +106,27 @@ namespace WordCopilotChat.utils
                 string pluginDirectory = GetUserDataRoot();
                 string dateFolder = DateTime.Now.ToString("yyyyMMdd");
                 string logDirectory = Path.Combine(pluginDirectory, "logs", "openai_requests", dateFolder);
-                
+
                 // 创建目录
                 Directory.CreateDirectory(logDirectory);
-                
+
                 // 生成文件名
                 string timestamp = DateTime.Now.ToString("HHmmss-fff");
                 string randomSuffix = Guid.NewGuid().ToString("N").Substring(0, 6);
                 string filename = $"{timestamp}_{tag}_{randomSuffix}.json";
                 string filepath = Path.Combine(logDirectory, filename);
-                
+
                 // 脱敏处理：隐藏API Key的中间部分，只保留前4位和后4位
                 string maskedApiKey = apiKey;
                 if (!string.IsNullOrEmpty(apiKey) && apiKey.Length > 8)
                 {
                     maskedApiKey = $"{apiKey.Substring(0, 4)}...{apiKey.Substring(apiKey.Length - 4)}";
                 }
-                
+
                 // 构建完整的请求信息（包括URL、Headers和Body）
                 var fullRequest = new JObject
                 {
-                    ["url"] = baseUrl.TrimEnd('/') + "/chat/completions",
+                    ["url"] = baseUrl,
                     ["method"] = "POST",
                     ["headers"] = new JObject
                     {
@@ -141,10 +138,10 @@ namespace WordCopilotChat.utils
                     ["tag"] = tag,
                     ["note"] = "⚠️ API Key已脱敏处理，实际使用时请替换为完整的API Key"
                 };
-                
+
                 // 保存到文件
                 File.WriteAllText(filepath, fullRequest.ToString(Formatting.Indented), Encoding.UTF8);
-                
+
                 Debug.WriteLine($"请求已保存到: {filepath}");
             }
             catch (Exception ex)
@@ -153,13 +150,13 @@ namespace WordCopilotChat.utils
                 // 不抛出异常，避免影响主流程
             }
         }
-        
+
         // 触发工具进度事件的公共方法
         public static void NotifyToolProgress(string message)
         {
             OnToolProgress?.Invoke(message);
         }
-        
+
         // 保存错误响应到日志文件
         private static void SaveErrorToLog(string baseUrl, JObject requestBody, string errorResponse, string statusCode, string tag)
         {
@@ -170,20 +167,20 @@ namespace WordCopilotChat.utils
                 string pluginDirectory = GetUserDataRoot();
                 string dateFolder = DateTime.Now.ToString("yyyyMMdd");
                 string logDirectory = Path.Combine(pluginDirectory, "logs", "openai_errors", dateFolder);
-                
+
                 // 创建目录
                 Directory.CreateDirectory(logDirectory);
-                
+
                 // 生成文件名
                 string timestamp = DateTime.Now.ToString("HHmmss-fff");
                 string randomSuffix = Guid.NewGuid().ToString("N").Substring(0, 6);
                 string filename = $"{timestamp}_{tag}_{statusCode}_{randomSuffix}.json";
                 string filepath = Path.Combine(logDirectory, filename);
-                
+
                 // 构建错误日志内容
                 var errorLog = new JObject
                 {
-                    ["url"] = baseUrl.TrimEnd('/') + "/chat/completions",
+                    ["url"] = baseUrl,
                     ["method"] = "POST",
                     ["statusCode"] = statusCode,
                     ["request"] = requestBody,
@@ -191,10 +188,10 @@ namespace WordCopilotChat.utils
                     ["timestamp"] = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss.fff"),
                     ["tag"] = tag
                 };
-                
+
                 // 保存到文件
                 File.WriteAllText(filepath, errorLog.ToString(Formatting.Indented), Encoding.UTF8);
-                
+
                 Debug.WriteLine($"错误日志已保存到: {filepath}");
             }
             catch (Exception ex)
@@ -221,7 +218,7 @@ namespace WordCopilotChat.utils
                 Parameters = parameters,
                 ExecuteFunction = executeFunction
             });
-            
+
             Debug.WriteLine($"工具 {name} 注册成功");
         }
 
@@ -253,39 +250,41 @@ namespace WordCopilotChat.utils
                 // 支持TLS 1.2和1.3,否则无法正常请求https请求
                 SslProtocols = System.Security.Authentication.SslProtocols.Tls12 | System.Security.Authentication.SslProtocols.Tls13
             });
-
+            // 解析 JSON 字符串（移到 try 外以便在 catch 中使用）
+            JObject jsonObject = null;
             try
             {
-            // 解析 JSON 字符串
-            JObject jsonObject = JObject.Parse(json);
-            bool stream = jsonObject["stream"] != null && jsonObject["stream"].Value<bool>();
-                
+                // 解析 JSON 字符串
+            
+                jsonObject = JObject.Parse(json);
+                bool stream = jsonObject["stream"] != null && jsonObject["stream"].Value<bool>();
+
                 // 如果有工具且是智能体模式，添加工具定义
                 if (_tools.Count > 0 && messages != null)
                 {
                     Debug.WriteLine($"检测到 {_tools.Count} 个工具，添加到请求中");
-                    
+
                     // 保存Agent模式的初始请求（在添加工具之前）
                     SaveRequestForPostman(baseUrl, apiKey, jsonObject, "agent_initial");
-                    
+
                     await CallWithTools(baseUrl, apiKey, jsonObject, cancellationToken, onContentReceived, messages, _httpClient);
                     return;
                 }
 
-            // 设置超时
-            _httpClient.Timeout = TimeSpan.FromMinutes(5);
-            
-            // 保存普通模式的请求
-            SaveRequestForPostman(baseUrl, apiKey, jsonObject, "general");
+                // 设置超时
+                _httpClient.Timeout = TimeSpan.FromMinutes(5);
 
-            var request = new HttpRequestMessage(HttpMethod.Post, baseUrl)
-            {
-                Headers =
+                // 保存普通模式的请求
+                SaveRequestForPostman(baseUrl, apiKey, jsonObject, "general");
+
+                var request = new HttpRequestMessage(HttpMethod.Post, baseUrl)
+                {
+                    Headers =
             {
                 Authorization = new AuthenticationHeaderValue("Bearer", apiKey)
             },
-                Content = new StringContent(JsonConvert.SerializeObject(jsonObject), Encoding.UTF8, "application/json")
-            };
+                    Content = new StringContent(JsonConvert.SerializeObject(jsonObject), Encoding.UTF8, "application/json")
+                };
 
                 using (var response = await _httpClient.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, cancellationToken))
                 {
@@ -300,7 +299,7 @@ namespace WordCopilotChat.utils
                             {
                                 // 检查是否被取消
                                 cancellationToken.ThrowIfCancellationRequested();
-                                
+
                                 if (!string.IsNullOrWhiteSpace(line))
                                 {
                                     var cleanLine = line.Trim();
@@ -351,11 +350,49 @@ namespace WordCopilotChat.utils
             catch (HttpRequestException e)
             {
                 Console.WriteLine($"Request error: {e.Message}");
+
+                // 记录HTTP请求错误到日志
+                try
+                {
+                    var errorDetail = new
+                    {
+                        error_type = "HttpRequestException",
+                        message = e.Message,
+                        stack_trace = e.StackTrace,
+                        inner_exception = e.InnerException?.Message
+                    };
+                    // 如果 jsonObject 为 null（JSON解析失败），创建一个包含原始json的对象
+                    var requestBody = jsonObject ?? new JObject { ["raw_json"] = json };
+                    SaveErrorToLog(baseUrl, requestBody, JsonConvert.SerializeObject(errorDetail), "HttpError", "general_http_error");
+                }
+                catch (Exception logEx)
+                {
+                    Debug.WriteLine($"保存HTTP错误日志失败: {logEx.Message}");
+                }
+
                 MessageBox.Show($"Request error: {e.Message}", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
             }
             catch (Exception e)
             {
                 Console.WriteLine($"Unexpected error: {e.Message}");
+
+                // 记录未预期错误到日志
+                try
+                {
+                    var errorDetail = new
+                    {
+                        error_type = e.GetType().Name,
+                        message = e.Message,
+                        stack_trace = e.StackTrace,
+                        inner_exception = e.InnerException?.Message
+                    };
+                    SaveErrorToLog(baseUrl, jsonObject, JsonConvert.SerializeObject(errorDetail), "UnexpectedError", "general_unexpected_error");
+                }
+                catch (Exception logEx)
+                {
+                    Debug.WriteLine($"保存未预期错误日志失败: {logEx.Message}");
+                }
+
                 MessageBox.Show($"Unexpected error: {e.Message}", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
             }
             finally
@@ -396,13 +433,13 @@ namespace WordCopilotChat.utils
                 // 添加工具到请求中
                 requestBody["tools"] = functionDefinitions;
                 requestBody["tool_choice"] = "auto";
-                
+
                 // 支持流式工具调用（现代AI工具的标准做法）
                 requestBody["stream"] = true;
 
                 Debug.WriteLine($"发送带工具的请求，工具数量: {functionDefinitions.Count}");
                 Debug.WriteLine("使用流式响应模式支持现代AI工具体验");
-                
+
                 // 输出完整的请求JSON用于调试
                 Debug.WriteLine("=== 完整请求JSON ===");
                 Debug.WriteLine(requestBody.ToString(Formatting.Indented));
@@ -410,7 +447,7 @@ namespace WordCopilotChat.utils
 
                 // 使用流式调用支持工具链
                 await CallWithToolsStreaming(baseUrl, apiKey, requestBody, httpClient, cancellationToken, onContentReceived, conversationMessages);
-                
+
 
             }
             catch (OperationCanceledException)
@@ -421,23 +458,94 @@ namespace WordCopilotChat.utils
             catch (JsonException jsonEx)
             {
                 Debug.WriteLine($"工具链JSON解析错误: {jsonEx.Message}");
+
+                // 记录JSON解析错误到日志
+                try
+                {
+                    var errorDetail = new
+                    {
+                        error_type = "JsonException",
+                        message = jsonEx.Message,
+                        stack_trace = jsonEx.StackTrace,
+                        inner_exception = jsonEx.InnerException?.Message
+                    };
+                    SaveErrorToLog(baseUrl, requestBody, JsonConvert.SerializeObject(errorDetail), "JsonError", "agent_json_error");
+                }
+                catch (Exception logEx)
+                {
+                    Debug.WriteLine($"保存JSON错误日志失败: {logEx.Message}");
+                }
+
                 // 可能是API返回了HTML错误页面，提供更友好的错误信息
                 onContentReceived?.Invoke($"⚠️ API调用失败：服务器返回了无效的响应格式。请检查API密钥是否正确，或者API服务是否正常。\n\n错误详情：{jsonEx.Message}");
             }
             catch (HttpRequestException httpEx)
             {
                 Debug.WriteLine($"工具链HTTP请求错误: {httpEx.Message}");
+
+                // 记录HTTP请求错误到日志
+                try
+                {
+                    var errorDetail = new
+                    {
+                        error_type = "HttpRequestException",
+                        message = httpEx.Message,
+                        stack_trace = httpEx.StackTrace,
+                        inner_exception = httpEx.InnerException?.Message
+                    };
+                    SaveErrorToLog(baseUrl, requestBody, JsonConvert.SerializeObject(errorDetail), "HttpError", "agent_http_error");
+                }
+                catch (Exception logEx)
+                {
+                    Debug.WriteLine($"保存HTTP错误日志失败: {logEx.Message}");
+                }
+
                 onContentReceived?.Invoke($"⚠️ 网络请求失败：{httpEx.Message}\n\n请检查网络连接和API服务状态。");
             }
             catch (TimeoutException timeoutEx)
             {
                 Debug.WriteLine($"工具链请求超时: {timeoutEx.Message}");
+
+                // 记录超时错误到日志
+                try
+                {
+                    var errorDetail = new
+                    {
+                        error_type = "TimeoutException",
+                        message = timeoutEx.Message,
+                        stack_trace = timeoutEx.StackTrace
+                    };
+                    SaveErrorToLog(baseUrl, requestBody, JsonConvert.SerializeObject(errorDetail), "Timeout", "agent_timeout_error");
+                }
+                catch (Exception logEx)
+                {
+                    Debug.WriteLine($"保存超时错误日志失败: {logEx.Message}");
+                }
+
                 onContentReceived?.Invoke("⚠️ API请求超时，请稍后重试。");
             }
             catch (Exception ex)
             {
                 Debug.WriteLine($"工具链调用出错: {ex.Message}");
                 Debug.WriteLine($"错误堆栈: {ex.StackTrace}");
+
+                // 记录未预期错误到日志
+                try
+                {
+                    var errorDetail = new
+                    {
+                        error_type = ex.GetType().Name,
+                        message = ex.Message,
+                        stack_trace = ex.StackTrace,
+                        inner_exception = ex.InnerException?.Message
+                    };
+                    SaveErrorToLog(baseUrl, requestBody, JsonConvert.SerializeObject(errorDetail), "UnexpectedError", "agent_unexpected_error");
+                }
+                catch (Exception logEx)
+                {
+                    Debug.WriteLine($"保存未预期错误日志失败: {logEx.Message}");
+                }
+
                 onContentReceived?.Invoke($"⚠️ 工具链调用失败：{ex.Message}\n\n已回退到普通聊天模式。");
             }
         }
@@ -471,7 +579,7 @@ namespace WordCopilotChat.utils
                     {
                         Debug.WriteLine($"API返回错误状态码: {response.StatusCode}");
                         Debug.WriteLine($"错误响应内容: {responseJson}");
-                        
+
                         // 尝试解析错误详情
                         string errorMessage = $"响应状态代码不指示成功: {(int)response.StatusCode} ({response.ReasonPhrase})";
                         try
@@ -479,11 +587,11 @@ namespace WordCopilotChat.utils
                             var errorJson = JObject.Parse(responseJson);
                             var errorDetail = errorJson["error"]?["message"]?.ToString();
                             var errorCode = errorJson["error"]?["code"]?.ToString();
-                            
+
                             if (!string.IsNullOrEmpty(errorDetail))
                             {
                                 errorMessage = errorDetail;
-                                
+
                                 // 特殊处理常见错误类型
                                 if (errorMessage.Contains("max_tokens") || errorMessage.Contains("maximum context length") || errorMessage.Contains("token"))
                                 {
@@ -494,9 +602,9 @@ namespace WordCopilotChat.utils
                                     errorMessage = $"错误代码 {errorCode}：{errorDetail}";
                                 }
                             }
-                            
+
                             Debug.WriteLine($"解析后的错误信息: {errorMessage}");
-                            
+
                             // 保存错误响应到日志
                             try
                             {
@@ -511,7 +619,7 @@ namespace WordCopilotChat.utils
                         {
                             Debug.WriteLine($"解析错误响应失败: {parseEx.Message}");
                         }
-                        
+
                         throw new HttpRequestException(errorMessage);
                     }
 
@@ -522,7 +630,7 @@ namespace WordCopilotChat.utils
                         responseJson = ExtractJsonFromSSE(responseJson);
                         Debug.WriteLine($"提取后的JSON: {responseJson.Substring(0, Math.Min(200, responseJson.Length))}...");
                     }
-                    
+
                     // 检查响应是否为JSON格式
                     if (!responseJson.TrimStart().StartsWith("{") && !responseJson.TrimStart().StartsWith("["))
                     {
@@ -567,11 +675,11 @@ namespace WordCopilotChat.utils
             try
             {
                 Debug.WriteLine("开始从SSE响应提取JSON内容");
-                
+
                 // 分割SSE数据行
                 var lines = sseResponse.Split(new[] { '\n', '\r' }, StringSplitOptions.RemoveEmptyEntries);
                 var jsonParts = new List<JObject>();
-                
+
                 foreach (var line in lines)
                 {
                     if (line.StartsWith("data: ") && !line.Contains("[DONE]"))
@@ -588,12 +696,12 @@ namespace WordCopilotChat.utils
                         }
                     }
                 }
-                
+
                 if (jsonParts.Count == 0)
                 {
                     throw new JsonException("未能从SSE响应中提取有效的JSON数据");
                 }
-                
+
                 // 合并tool_calls和内容
                 var result = new JObject
                 {
@@ -610,10 +718,10 @@ namespace WordCopilotChat.utils
                         }
                     }
                 };
-                
+
                 var toolCallsMap = new Dictionary<int, JObject>(); // 使用索引来合并分段的tool_calls
                 var contentParts = new List<string>();
-                
+
                 foreach (var part in jsonParts)
                 {
                     var choices = part["choices"] as JArray;
@@ -628,7 +736,7 @@ namespace WordCopilotChat.utils
                             {
                                 contentParts.Add(content);
                             }
-                            
+
                             // 提取tool_calls
                             var deltaToolCalls = delta["tool_calls"] as JArray;
                             if (deltaToolCalls != null)
@@ -639,26 +747,26 @@ namespace WordCopilotChat.utils
                                     if (toolCallDelta != null)
                                     {
                                         var index = toolCallDelta["index"]?.ToObject<int>() ?? i;
-                                        
+
                                         if (!toolCallsMap.ContainsKey(index))
                                         {
                                             toolCallsMap[index] = new JObject();
                                         }
-                                        
+
                                         var existingToolCall = toolCallsMap[index];
-                                        
+
                                         // 合并id
                                         if (toolCallDelta["id"] != null)
                                         {
                                             existingToolCall["id"] = toolCallDelta["id"];
                                         }
-                                        
+
                                         // 合并type
                                         if (toolCallDelta["type"] != null)
                                         {
                                             existingToolCall["type"] = toolCallDelta["type"];
                                         }
-                                        
+
                                         // 合并function
                                         if (toolCallDelta["function"] != null)
                                         {
@@ -667,14 +775,14 @@ namespace WordCopilotChat.utils
                                             {
                                                 existingToolCall["function"] = new JObject();
                                             }
-                                            
+
                                             var existingFunction = existingToolCall["function"] as JObject;
-                                            
+
                                             if (functionDelta["name"] != null)
                                             {
                                                 existingFunction["name"] = functionDelta["name"];
                                             }
-                                            
+
                                             if (functionDelta["arguments"] != null)
                                             {
                                                 var args = functionDelta["arguments"].ToString();
@@ -694,10 +802,10 @@ namespace WordCopilotChat.utils
                         }
                     }
                 }
-                
+
                 // 设置合并后的内容
                 result["choices"][0]["message"]["content"] = string.Join("", contentParts);
-                
+
                 // 设置tool_calls
                 if (toolCallsMap.Count > 0)
                 {
@@ -708,7 +816,7 @@ namespace WordCopilotChat.utils
                     }
                     result["choices"][0]["message"]["tool_calls"] = mergedToolCalls;
                 }
-                
+
                 Debug.WriteLine($"SSE提取完成，工具调用数量: {toolCallsMap.Count}");
                 return result.ToString();
             }
@@ -718,12 +826,12 @@ namespace WordCopilotChat.utils
                 throw new JsonException($"无法从SSE响应提取JSON: {ex.Message}");
             }
         }
-        
+
         // 流式工具调用方法 - 支持现代AI工具体验
         private static async Task CallWithToolsStreaming(string baseUrl, string apiKey, JObject requestBody, HttpClient httpClient, CancellationToken cancellationToken, Action<string> onContentReceived, List<JObject> conversationMessages)
         {
             Debug.WriteLine("CallWithToolsStreaming: 开始调用");
-            
+
             var request = new HttpRequestMessage(HttpMethod.Post, baseUrl)
             {
                 Headers = { Authorization = new AuthenticationHeaderValue("Bearer", apiKey) },
@@ -738,7 +846,7 @@ namespace WordCopilotChat.utils
                     var errorContent = await response.Content.ReadAsStringAsync();
                     Debug.WriteLine($"API返回错误状态码: {response.StatusCode}");
                     Debug.WriteLine($"错误响应内容: {errorContent}");
-                    
+
                     // 尝试解析错误详情
                     string errorMessage = $"响应状态代码不指示成功: {(int)response.StatusCode} ({response.ReasonPhrase})";
                     try
@@ -747,11 +855,11 @@ namespace WordCopilotChat.utils
                         var errorDetail = errorJson["error"]?["message"]?.ToString();
                         var errorCode = errorJson["error"]?["code"]?.ToString();
                         var errorType = errorJson["error"]?["type"]?.ToString();
-                        
+
                         if (!string.IsNullOrEmpty(errorDetail))
                         {
                             errorMessage = errorDetail;
-                            
+
                             // 特殊处理常见错误类型
                             if (errorMessage.Contains("max_tokens") || errorMessage.Contains("maximum context length") || errorMessage.Contains("token"))
                             {
@@ -762,9 +870,9 @@ namespace WordCopilotChat.utils
                                 errorMessage = $"错误代码 {errorCode}：{errorDetail}";
                             }
                         }
-                        
+
                         Debug.WriteLine($"解析后的错误信息: {errorMessage}");
-                        
+
                         // 保存错误响应到日志
                         try
                         {
@@ -779,7 +887,7 @@ namespace WordCopilotChat.utils
                     {
                         Debug.WriteLine($"解析错误响应失败: {parseEx.Message}");
                     }
-                    
+
                     throw new HttpRequestException(errorMessage);
                 }
 
@@ -788,7 +896,7 @@ namespace WordCopilotChat.utils
                 {
                     var currentToolCalls = new List<dynamic>();
                     var currentContent = new StringBuilder();
-                    
+
                     string line;
                     while ((line = await reader.ReadLineAsync()) != null)
                     {
@@ -805,12 +913,12 @@ namespace WordCopilotChat.utils
                             {
                                 var chunk = JObject.Parse(jsonData);
                                 var choices = chunk["choices"] as JArray;
-                                
+
                                 if (choices != null && choices.Count > 0)
                                 {
                                     var choice = choices[0] as JObject;
                                     var delta = choice["delta"] as JObject;
-                                    
+
                                     if (delta != null)
                                     {
                                         // 处理文本内容 - 实现内联效果
@@ -820,7 +928,7 @@ namespace WordCopilotChat.utils
                                             currentContent.Append(content);
                                             onContentReceived?.Invoke(content);
                                         }
-                                        
+
                                         // 处理工具调用
                                         var toolCalls = delta["tool_calls"] as JArray;
                                         if (toolCalls != null)
@@ -830,40 +938,42 @@ namespace WordCopilotChat.utils
                                                 var index = toolCallDelta["index"]?.ToObject<int>() ?? 0;
                                                 var id = toolCallDelta["id"]?.ToString();
                                                 var function = toolCallDelta["function"] as JObject;
-                                                
+
                                                 // 确保工具调用列表足够大
                                                 while (currentToolCalls.Count <= index)
                                                 {
                                                     currentToolCalls.Add(new { id = "", name = "", arguments = new StringBuilder() });
                                                 }
-                                                
+
                                                 // 更新工具调用信息
                                                 if (!string.IsNullOrEmpty(id))
                                                 {
-                                                    currentToolCalls[index] = new { 
-                                                        id = id, 
-                                                        name = currentToolCalls[index].name, 
-                                                        arguments = currentToolCalls[index].arguments 
+                                                    currentToolCalls[index] = new
+                                                    {
+                                                        id = id,
+                                                        name = currentToolCalls[index].name,
+                                                        arguments = currentToolCalls[index].arguments
                                                     };
                                                 }
-                                                
+
                                                 if (function != null)
                                                 {
                                                     var name = function["name"]?.ToString();
                                                     var arguments = function["arguments"]?.ToString();
-                                                    
+
                                                     if (!string.IsNullOrEmpty(name))
                                                     {
-                                                        currentToolCalls[index] = new { 
-                                                            id = currentToolCalls[index].id, 
-                                                            name = name, 
-                                                            arguments = currentToolCalls[index].arguments 
+                                                        currentToolCalls[index] = new
+                                                        {
+                                                            id = currentToolCalls[index].id,
+                                                            name = name,
+                                                            arguments = currentToolCalls[index].arguments
                                                         };
-                                                        
+
                                                         // 发送工具调用开始进度
                                                         OnToolProgress?.Invoke($"执行工具: {name}");
                                                     }
-                                                    
+
                                                     if (!string.IsNullOrEmpty(arguments))
                                                     {
                                                         ((StringBuilder)currentToolCalls[index].arguments).Append(arguments);
@@ -872,7 +982,7 @@ namespace WordCopilotChat.utils
                                             }
                                         }
                                     }
-                                    
+
                                     // 检查是否完成
                                     var finishReason = choice["finish_reason"]?.ToString();
                                     if (finishReason == "tool_calls")
@@ -894,14 +1004,14 @@ namespace WordCopilotChat.utils
                             }
                         }
                     }
-                    
+
                     Debug.WriteLine($"CallWithToolsStreaming: 流式处理结束，内容长度: {currentContent.Length}");
                 }
             }
-            
+
             Debug.WriteLine("CallWithToolsStreaming: 方法结束");
         }
-        
+
         // 执行工具调用的辅助方法
         private static async Task ExecuteToolCallsAsync(List<dynamic> toolCalls, List<JObject> conversationMessages, string baseUrl, string apiKey, JObject requestBody, HttpClient httpClient, CancellationToken cancellationToken, Action<string> onContentReceived)
         {
@@ -920,14 +1030,14 @@ namespace WordCopilotChat.utils
                     }
                 });
             }
-            
+
             conversationMessages.Add(new JObject
             {
                 ["role"] = "assistant",
                 ["content"] = "",
                 ["tool_calls"] = toolCallsArray
             });
-            
+
             // 执行每个工具调用
             foreach (var toolCall in toolCalls)
             {
@@ -938,11 +1048,11 @@ namespace WordCopilotChat.utils
                     {
                         var parameters = JsonConvert.DeserializeObject<Dictionary<string, object>>(toolCall.arguments.ToString());
                         var output = await tool.ExecuteFunction(parameters);
-                        
+
                         // 检查是否是预览模式
                         JObject outputJson = null;
                         try { outputJson = JObject.Parse(output); } catch { }
-                        
+
                         if (outputJson != null && outputJson["preview_mode"]?.ToObject<bool>() == true && outputJson["success"]?.ToObject<bool>() == true)
                         {
                             OnToolPreviewReady?.Invoke(outputJson);
@@ -952,7 +1062,7 @@ namespace WordCopilotChat.utils
                                 ["tool_call_id"] = toolCall.id,
                                 ["content"] = "预览操作已生成，等待用户确认。"
                             });
-                            
+
                             // 预览模式下不继续调用API，直接返回等待用户操作
                             Debug.WriteLine("预览模式：暂停API调用，等待用户确认操作");
                             return;
@@ -965,7 +1075,7 @@ namespace WordCopilotChat.utils
                                 ["tool_call_id"] = toolCall.id,
                                 ["content"] = output
                             });
-                            
+
                             OnToolProgress?.Invoke($"工具 {toolCall.name} 执行完成，返回数据长度: {output?.Length ?? 0} 字符");
                         }
                     }
@@ -980,15 +1090,15 @@ namespace WordCopilotChat.utils
                     }
                 }
             }
-            
+
             // 继续对话 - 递归调用实现多轮工具调用
             requestBody["messages"] = JArray.FromObject(conversationMessages);
-            
+
             // 保存Agent模式的后续请求（工具执行后）
             SaveRequestForPostman(baseUrl, apiKey, requestBody, "agent_followup");
-            
+
             Debug.WriteLine($"ExecuteToolCallsAsync: 工具执行完成，继续调用API获取最终回复，对话历史数量: {conversationMessages.Count}");
-            
+
             // 创建新的 HttpClient 实例用于递归调用，避免连接池问题
             using (var newHttpClient = new HttpClient(new HttpClientHandler()
             {
@@ -997,9 +1107,9 @@ namespace WordCopilotChat.utils
             {
                 newHttpClient.Timeout = TimeSpan.FromMinutes(5);
                 Debug.WriteLine("ExecuteToolCallsAsync: 创建新的HttpClient实例用于递归调用");
-                
+
                 await CallWithToolsStreaming(baseUrl, apiKey, requestBody, newHttpClient, cancellationToken, onContentReceived, conversationMessages);
-                
+
                 Debug.WriteLine("ExecuteToolCallsAsync: 递归调用完成");
             }
         }

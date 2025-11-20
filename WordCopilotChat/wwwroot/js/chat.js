@@ -3932,6 +3932,16 @@ function setupInputShortcuts() {
             }
         }
         
+        // 检查上下文选择器是否应该隐藏
+        if (contextSelector && contextSelector.style.display !== 'none') {
+            const triggerIndex = findContextTriggerIndex(text, cursorPos);
+            if (triggerIndex === -1) {
+                console.log('未找到#触发字符，隐藏上下文选择器');
+                hideContextSelector();
+                return; // 立即返回，不再处理其他逻辑
+            }
+        }
+        
         // 检查是否输入了 @、/ 或 # 触发快捷选择
         if (text.length > 0 && cursorPos > 0) {
             const charBefore = text[cursorPos - 1];
@@ -4015,6 +4025,73 @@ function findTriggerIndex(text, cursorPos) {
     return -1;
 }
 
+// 查找上下文触发字符（#）的位置
+function findContextTriggerIndex(text, cursorPos) {
+    for (let i = cursorPos - 1; i >= 0; i--) {
+        const char = text[i];
+        if (char === '#') {
+            // 必须在空格后（不允许在开头）
+            const prevChar = i > 0 ? text[i - 1] : '';
+            if (prevChar === ' ' && i > 0) {
+                return i;
+            }
+        } else if (char === ' ') {
+            break;
+        }
+    }
+    return -1;
+}
+
+// 获取用户的分页加载偏好设置
+function getPagedLoadingPreference() {
+    const saved = localStorage.getItem('headingPagedLoading');
+    return saved === null ? true : saved === 'true'; // 默认启用分页
+}
+
+// 保存用户的分页加载偏好设置
+function setPagedLoadingPreference(enabled) {
+    localStorage.setItem('headingPagedLoading', enabled.toString());
+}
+
+// 生成设置区域的HTML
+function generateSettingsHtml() {
+    const pagedLoadingEnabled = getPagedLoadingPreference();
+    return `
+        <div class="selector-settings">
+            <label class="selector-setting-item">
+                <input type="checkbox" id="paged-loading-checkbox" ${pagedLoadingEnabled ? 'checked' : ''}>
+                <span>分页加载标题（小文档可关闭以提升速度）</span>
+            </label>
+        </div>
+    `;
+}
+
+// 绑定设置勾选框事件
+function bindSettingsCheckboxEvent() {
+    const checkbox = document.getElementById('paged-loading-checkbox');
+    if (checkbox) {
+        checkbox.addEventListener('change', (e) => {
+            const enabled = e.target.checked;
+            setPagedLoadingPreference(enabled);
+            console.log(`分页加载设置已更改为: ${enabled ? '启用' : '禁用'}`);
+            
+            // 清空当前标题列表
+            window.currentHeadings = [];
+            window.currentPage = 0;
+            window.hasMoreHeadings = false;
+            
+            // 重新加载标题，使用最新的设置HTML
+            quickSelectorContent.innerHTML = generateSettingsHtml() + '<div class="selector-loading">正在重新获取文档标题...</div>';
+            
+            // 重新绑定事件（因为DOM被重建了）
+            bindSettingsCheckboxEvent();
+            
+            // 根据新的设置加载标题
+            fetchDocumentHeadings(0, false, !enabled);
+        });
+    }
+}
+
 // 显示快捷选择器
 function showQuickSelector() {
     if (!quickSelector || !quickSelectorContent) return;
@@ -4026,13 +4103,20 @@ function showQuickSelector() {
     quickSelector.style.display = 'block';
     console.log(`⏱️ 选择器显示完成, 耗时: ${(performance.now() - showStartTime).toFixed(2)}ms`);
     
-    // 显示加载状态
-    quickSelectorContent.innerHTML = '<div class="selector-loading">正在获取文档标题...</div>';
+    // 获取用户的分页加载偏好
+    const pagedLoadingEnabled = getPagedLoadingPreference();
+    
+    // 显示加载状态和分页设置
+    quickSelectorContent.innerHTML = generateSettingsHtml() + '<div class="selector-loading">正在获取文档标题...</div>';
+    
+    // 绑定勾选框事件
+    bindSettingsCheckboxEvent();
+    
     console.log(`⏱️ 加载状态显示完成, 耗时: ${(performance.now() - showStartTime).toFixed(2)}ms`);
     
     // 请求标题数据
     console.log(`⏱️ 准备调用fetchDocumentHeadings, 耗时: ${(performance.now() - showStartTime).toFixed(2)}ms`);
-    fetchDocumentHeadings();
+    fetchDocumentHeadings(0, false, !pagedLoadingEnabled); // 根据用户设置决定是否一次性加载所有
 }
 
 // 隐藏快捷选择器
@@ -4054,20 +4138,20 @@ let currentSelectedIndex = -1;
 // 是否正在获取标题
 let isFetchingHeadings = false;
 
-// 获取文档标题（支持分页）
-function fetchDocumentHeadings(page = 0, append = false) {
+// 获取文档标题（支持分页和一次性加载所有）
+function fetchDocumentHeadings(page = 0, append = false, loadAll = false) {
     try {
         // 设置获取状态
         isFetchingHeadings = true;
         const startTime = performance.now();
-        console.log(`⏱️ 开始获取文档标题... 页码: ${page}, 追加: ${append}, 开始时间: ${startTime.toFixed(2)}ms`);
+        console.log(`⏱️ 开始获取文档标题... 页码: ${page}, 追加: ${append}, 一次性加载: ${loadAll}, 开始时间: ${startTime.toFixed(2)}ms`);
         
         if (window.chrome && window.chrome.webview) {
             console.log(`⏱️ 向C#发送getDocumentHeadings请求, 耗时: ${(performance.now() - startTime).toFixed(2)}ms`);
             window.chrome.webview.postMessage({
                 type: 'getDocumentHeadings',
-                page: page,
-                pageSize: 10, // 改为10条
+                page: loadAll ? 0 : page,
+                pageSize: loadAll ? 99999 : 10, // 如果一次性加载，设置一个很大的数字
                 append: append
             });
         } else {
@@ -4121,7 +4205,8 @@ function showHeadingsInSelector(headings, page = 0, append = false, hasMore = fa
     
     if (!headings || headings.length === 0) {
         if (!append) {
-        quickSelectorContent.innerHTML = '<div class="selector-empty">文档中没有找到标题</div>';
+            quickSelectorContent.innerHTML = generateSettingsHtml() + '<div class="selector-empty">文档中没有找到标题</div>';
+            bindSettingsCheckboxEvent();
         }
         console.log(`⏱️ 标题为空，直接返回, 耗时: ${(performance.now() - functionStartTime).toFixed(2)}ms`);
         return;
@@ -4164,8 +4249,11 @@ function showHeadingsInSelector(headings, page = 0, append = false, hasMore = fa
     
     const renderStartTime = performance.now();
     console.log(`⏱️ 开始渲染HTML到DOM, 渲染开始时间: ${renderStartTime.toFixed(2)}ms`);
-    quickSelectorContent.innerHTML = hierarchicalHtml + loadMoreHtml;
+    quickSelectorContent.innerHTML = generateSettingsHtml() + hierarchicalHtml + loadMoreHtml;
     console.log(`⏱️ HTML渲染到DOM完成, 耗时: ${(performance.now() - renderStartTime).toFixed(2)}ms`);
+    
+    // 重新绑定设置勾选框事件
+    bindSettingsCheckboxEvent();
     
     // 重置选中项
     currentSelectedIndex = -1;
@@ -4331,7 +4419,8 @@ function stopFetchingHeadings() {
         
         // 更新选择器显示
         if (quickSelectorContent) {
-            quickSelectorContent.innerHTML = '<div class="selector-cancelled">已取消获取标题</div>';
+            quickSelectorContent.innerHTML = generateSettingsHtml() + '<div class="selector-cancelled">已取消获取标题</div>';
+            bindSettingsCheckboxEvent();
         }
     }
 }
@@ -4383,7 +4472,8 @@ function handleLazyScroll() {
 // 显示错误信息
 function showSelectorError(message) {
     if (!quickSelectorContent) return;
-    quickSelectorContent.innerHTML = `<div class="selector-error">${escapeHtml(message)}</div>`;
+    quickSelectorContent.innerHTML = generateSettingsHtml() + `<div class="selector-error">${escapeHtml(message)}</div>`;
+    bindSettingsCheckboxEvent();
     // 重置获取状态
     isFetchingHeadings = false;
 }
@@ -4578,6 +4668,11 @@ function handleToolPreview(data) {
         
         // 绑定事件处理器
         bindToolPreviewEvents(preview.element, preview.id, actionData);
+        
+        // 渲染预览内容中的数学公式、Mermaid流程图等
+        setTimeout(() => {
+            renderPreviewContent(preview.element);
+        }, 100); // 延迟渲染，确保DOM已完全插入
         
         // 不再立即显示批量操作按钮，等待模型处理完成后再显示
         console.log('现代化预览创建完成，等待模型处理完成后显示批量按钮');
@@ -5669,39 +5764,177 @@ function showInlinePreviewDemo() {
     }, 2000);
 }
 
-// 生成插入内容的预览
+// 生成插入内容的预览（支持渲染Markdown、表格、公式、代码、流程图）
 function generateInsertPreviewContent(data) {
-    let content = `🎯 操作类型: ${getActionTypeName(data.action_type)}\n`;
-    content += `📍 目标标题: "${data.target_heading}"\n`;
-    content += `📝 格式类型: ${getFormatTypeName(data.format_type)}\n`;
+    // 元信息部分（移除emoji）
+    let metaInfo = `
+        <div class="preview-meta-section">
+            <div class="preview-meta-item">
+                <span class="meta-label">操作类型:</span>
+                <span class="meta-value">${getActionTypeName(data.action_type)}</span>
+            </div>
+            <div class="preview-meta-item">
+                <span class="meta-label">目标标题:</span>
+                <span class="meta-value">"${escapeHtml(data.target_heading)}"</span>
+            </div>
+            <div class="preview-meta-item">
+                <span class="meta-label">格式类型:</span>
+                <span class="meta-value">${getFormatTypeName(data.format_type)}</span>
+            </div>
+    `;
     
     if (data.indent_level > 0) {
-        content += `📐 缩进级别: ${data.indent_level}\n`;
+        metaInfo += `
+            <div class="preview-meta-item">
+                <span class="meta-label">缩进级别:</span>
+                <span class="meta-value">${data.indent_level}</span>
+            </div>
+        `;
     }
     
-    content += `📋 预览内容:\n`;
-    content += '─'.repeat(40) + '\n';
-    content += data.preview_content;
-    content += '\n' + '─'.repeat(40);
+    metaInfo += `</div>`;
     
-    return content;
+    // 渲染预览内容（支持Markdown、表格、公式、代码、流程图）
+    let previewContent = data.preview_content || '';
+    let renderedContent = '';
+    
+    if (previewContent.trim()) {
+        // 预处理：将 "• " 或 "・" 开头的行转换为标准Markdown列表
+        previewContent = previewContent.replace(/^[•・]\s+/gm, '- ');
+        
+        // 使用现有的 renderMarkdown 函数渲染内容
+        const renderedHTML = renderMarkdown(previewContent);
+        
+        // 创建临时容器用于后处理
+        const tempDiv = document.createElement('div');
+        tempDiv.className = 'preview-rendered-content markdown-content';
+        tempDiv.innerHTML = renderedHTML;
+        
+        // 应用代码高亮、表格工具栏等处理（但不执行）
+        try {
+            // 处理代码块高亮
+            tempDiv.querySelectorAll('pre code').forEach((block) => {
+                if (typeof hljs !== 'undefined') {
+                    hljs.highlightElement(block);
+                }
+            });
+            
+            // 处理表格（添加提示而非操作按钮）
+            tempDiv.querySelectorAll('table').forEach((table, index) => {
+                if (!table.closest('.table-container')) {
+                    const container = document.createElement('div');
+                    container.className = 'table-container';
+                    
+                    const toolbar = document.createElement('div');
+                    toolbar.className = 'table-toolbar';
+                    toolbar.innerHTML = `
+                        <p>表格预览</p>
+                        <div>
+                            <span style="color: #666; font-size: 12px;">接受后可插入到Word</span>
+                        </div>
+                    `;
+                    
+                    table.parentNode.insertBefore(container, table);
+                    container.appendChild(toolbar);
+                    container.appendChild(table);
+                }
+            });
+            
+            // 处理代码块（添加提示而非操作按钮）
+            tempDiv.querySelectorAll('pre code').forEach((codeBlock, index) => {
+                const pre = codeBlock.parentElement;
+                if (pre && !pre.previousElementSibling?.classList?.contains('code-toolbar')) {
+                    const language = Array.from(codeBlock.classList)
+                        .find(cls => cls.startsWith('language-'))
+                        ?.replace('language-', '') || 'text';
+                    
+                    const toolbar = document.createElement('div');
+                    toolbar.className = 'code-toolbar';
+                    toolbar.innerHTML = `
+                        <p>${language}</p>
+                        <div>
+                            <span style="color: #666; font-size: 12px;">接受后可插入到Word</span>
+                        </div>
+                    `;
+                    
+                    pre.parentNode.insertBefore(toolbar, pre);
+                }
+            });
+            
+        } catch (e) {
+            console.warn('预览内容后处理失败:', e);
+        }
+        
+        renderedContent = `
+            <div class="preview-content-separator" onclick="toggleDetailedPreview(event)">
+                <span class="preview-toggle-icon collapsed"></span>
+                <span>预览效果</span>
+            </div>
+            <div class="preview-rendered-wrapper" style="display: none;">
+                ${tempDiv.outerHTML}
+            </div>
+        `;
+    } else {
+        renderedContent = `
+            <div class="preview-empty">
+                <span style="color: #999;">（无预览内容）</span>
+            </div>
+        `;
+    }
+    
+    return metaInfo + renderedContent;
 }
 
-// 生成样式修改的预览
+// 生成样式修改的预览（返回HTML格式）
 function generateStylePreviewContent(data) {
-    let content = `🎯 操作类型: ${getActionTypeName(data.action_type)}\n`;
-    content += `🔍 目标文本: "${data.text_to_find}"\n`;
-    content += `🎨 样式修改:\n`;
+    // 元信息部分（移除emoji）
+    let metaInfo = `
+        <div class="preview-meta-section">
+            <div class="preview-meta-item">
+                <span class="meta-label">操作类型:</span>
+                <span class="meta-value">${getActionTypeName(data.action_type)}</span>
+            </div>
+            <div class="preview-meta-item">
+                <span class="meta-label">目标文本:</span>
+                <span class="meta-value">"${escapeHtml(data.text_to_find || '')}"</span>
+            </div>
+        </div>
+    `;
     
+    // 样式修改列表
+    let stylesContent = '';
     if (data.preview_styles && data.preview_styles.length > 0) {
-        data.preview_styles.forEach(style => {
-            content += `  ${style}\n`;
-        });
+        const stylesList = data.preview_styles.map(style => 
+            `<li style="padding: 8px 12px; background: #f8f9fa; border-left: 3px solid #007bff; margin-bottom: 8px; border-radius: 4px;">
+                ${escapeHtml(style)}
+            </li>`
+        ).join('');
+        
+        stylesContent = `
+            <div class="preview-content-separator" onclick="toggleDetailedPreview(event)">
+                <span class="preview-toggle-icon collapsed"></span>
+                <span>样式修改</span>
+            </div>
+            <div class="preview-rendered-wrapper" style="display: none;">
+                <ul style="list-style: none; padding: 0; margin: 0;">
+                    ${stylesList}
+                </ul>
+            </div>
+        `;
     } else {
-        content += '  (无样式修改)';
+        stylesContent = `
+            <div class="preview-content-separator">
+                <span>样式修改</span>
+            </div>
+            <div class="preview-rendered-wrapper">
+                <div class="preview-empty">
+                    <span>(无样式修改)</span>
+                </div>
+            </div>
+        `;
     }
     
-    return content;
+    return metaInfo + stylesContent;
 }
 
 // 生成文本插入的预览
@@ -5792,18 +6025,34 @@ function rejectPreviewedAction() {
 
 // ==================== 现代化工具预览功能 ====================
 
-// 生成现代化工具预览HTML
+// 生成现代化工具预览HTML（支持渲染Markdown、表格、公式、代码、流程图）
 function generateModernToolPreview(data, previewId) {
     const toolIcon = getToolIcon(data.action_type);
     const toolName = getToolName(data.action_type);
     const statusClass = data.success ? 'success' : 'error';
     
-    // 生成工具参数显示
-    const parametersHtml = generateToolParameters(data);
-    
-    // 生成预览内容
-    const previewContent = data.preview_content || data.original_content || '';
-    const previewInfo = data.message || '工具调用预览';
+    // 根据操作类型生成预览内容（使用增强的渲染函数）
+    let previewContentHtml = '';
+    if (data.action_type === 'insert_content') {
+        previewContentHtml = generateInsertPreviewContent(data);
+    } else if (data.action_type === 'modify_style') {
+        previewContentHtml = generateStylePreviewContent(data);
+    } else {
+        // 其他类型仍使用纯文本
+        const previewContent = data.preview_content || data.original_content || '';
+        const previewInfo = data.message || '工具调用预览';
+        previewContentHtml = `
+            <div class="preview-meta-section">
+                <div class="preview-meta-item">
+                    <span class="meta-label">预览信息:</span>
+                    <span class="meta-value">${escapeHtml(previewInfo)}</span>
+                </div>
+            </div>
+            <div class="preview-rendered-wrapper">
+                <pre style="white-space: pre-wrap; font-family: 'Consolas', monospace; font-size: 13px;">${escapeHtml(previewContent)}</pre>
+            </div>
+        `;
+    }
     
     return `
         <div class="tool-preview-container ${statusClass}" data-preview-id="${previewId}">
@@ -5825,17 +6074,35 @@ function generateModernToolPreview(data, previewId) {
             </div>
             
             <div class="tool-preview-content">
-                <div class="tool-preview-info" onclick="togglePreviewContent('${previewId}')">
-                    <div>${previewInfo}</div>
-                    <div class="preview-toggle-btn" data-preview-id="${previewId}">
-                        <span class="toggle-icon">▼</span>
-                    </div>
-                </div>
-                
-                <div class="tool-preview-display collapsed" id="preview-content-${previewId}">${escapeHtml(previewContent)}</div>
+                ${previewContentHtml}
             </div>
         </div>
     `;
+}
+
+// 切换详细预览内容的展开/折叠状态
+function toggleDetailedPreview(event) {
+    event.stopPropagation(); // 防止事件冒泡
+    
+    const separator = event.currentTarget;
+    const toggleIcon = separator.querySelector('.preview-toggle-icon');
+    const wrapper = separator.nextElementSibling;
+    
+    if (!wrapper || !wrapper.classList.contains('preview-rendered-wrapper')) return;
+    
+    if (wrapper.style.display === 'none') {
+        // 展开
+        wrapper.style.display = 'block';
+        if (toggleIcon) {
+            toggleIcon.classList.remove('collapsed');
+        }
+    } else {
+        // 折叠
+        wrapper.style.display = 'none';
+        if (toggleIcon) {
+            toggleIcon.classList.add('collapsed');
+        }
+    }
 }
 
 // 注意：ReAct思考过程现在由模型生成，不再在前端硬编码
@@ -5873,6 +6140,106 @@ function generateToolParameters(data) {
 }
 
 // 已移除工具详情网格功能，简化界面
+
+// 渲染预览内容（支持MathJax公式、Mermaid流程图等）
+function renderPreviewContent(previewElement) {
+    if (!previewElement) return;
+    
+    try {
+        // 查找预览渲染区域
+        const renderedContent = previewElement.querySelector('.preview-rendered-content');
+        if (!renderedContent) {
+            console.log('预览中无需渲染的内容');
+            return;
+        }
+        
+        console.log('开始渲染预览内容中的公式和流程图...');
+        
+        // 1. 处理MathJax公式
+        if (typeof MathJax !== 'undefined') {
+            MathJax.Hub.Queue(["Typeset", MathJax.Hub, renderedContent]);
+            
+            // 渲染完成后添加公式工具栏（提示信息）
+            MathJax.Hub.Queue(function() {
+                renderedContent.querySelectorAll('script[type^="math/tex"]').forEach((script) => {
+                    if (!script.parentElement.classList.contains('equation-container') && 
+                        !script.hasAttribute('data-preview-processed')) {
+                        
+                        const formula = script.textContent.trim();
+                        if (formula) {
+                            const container = document.createElement('div');
+                            container.className = 'equation-container';
+                            
+                            const toolbar = document.createElement('div');
+                            toolbar.className = 'math-toolbar';
+                            toolbar.innerHTML = `
+                                <p>数学公式</p>
+                                <div>
+                                    <span style="color: #666; font-size: 12px;">接受后可插入到Word</span>
+                                </div>
+                            `;
+                            
+                            if (script.parentNode) {
+                                script.parentNode.insertBefore(container, script);
+                                container.appendChild(toolbar);
+                                container.appendChild(script);
+                                script.setAttribute('data-preview-processed', 'true');
+                            }
+                        }
+                    }
+                });
+                console.log('预览中的公式渲染完成');
+            });
+        }
+        
+        // 2. 处理Mermaid流程图
+        if (typeof mermaid !== 'undefined') {
+            const mermaidElements = renderedContent.querySelectorAll('.mermaid');
+            if (mermaidElements.length > 0) {
+                console.log(`发现 ${mermaidElements.length} 个Mermaid流程图，开始渲染...`);
+                
+                mermaidElements.forEach((element, index) => {
+                    // 为每个Mermaid元素添加唯一ID
+                    if (!element.id) {
+                        element.id = `preview-mermaid-${Date.now()}-${index}`;
+                    }
+                    
+                    // 添加提示工具栏
+                    if (!element.closest('.mermaid-container')) {
+                        const container = document.createElement('div');
+                        container.className = 'mermaid-container';
+                        
+                        const toolbar = document.createElement('div');
+                        toolbar.className = 'mermaid-toolbar';
+                        toolbar.innerHTML = `
+                            <p>流程图</p>
+                            <div>
+                                <span style="color: #666; font-size: 12px;">接受后可插入到Word</span>
+                            </div>
+                        `;
+                        
+                        element.parentNode.insertBefore(container, element);
+                        container.appendChild(toolbar);
+                        container.appendChild(element);
+                    }
+                });
+                
+                // 初始化Mermaid渲染
+                try {
+                    mermaid.init(undefined, renderedContent.querySelectorAll('.mermaid'));
+                    console.log('预览中的Mermaid流程图渲染完成');
+                } catch (error) {
+                    console.error('Mermaid渲染失败:', error);
+                }
+            }
+        }
+        
+        console.log('预览内容渲染完成');
+        
+    } catch (error) {
+        console.error('渲染预览内容时出错:', error);
+    }
+}
 
 // 绑定工具预览事件处理器
 function bindToolPreviewEvents(element, previewId, actionData) {

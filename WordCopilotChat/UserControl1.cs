@@ -21,6 +21,7 @@ using WordCopilotChat.services;
 // 使用别名解决命名冲突
 using TaskAsync = System.Threading.Tasks.Task;
 using Model = WordCopilotChat.models.Model;
+using WordCopilot.utils;
 
 
 namespace WordCopilotChat

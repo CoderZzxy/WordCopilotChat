@@ -243,12 +243,6 @@
         }
         "Entry"
         {
-        "MsmKey" = "8:_3BB0853F26894E2CB0E23F2352F2110A"
-        "OwnerKey" = "8:_UNDEFINED"
-        "MsmSig" = "8:_UNDEFINED"
-        }
-        "Entry"
-        {
         "MsmKey" = "8:_454642AC4F2EF356B221088B7667221D"
         "OwnerKey" = "8:_5F46DCD6F281464F872985BDD3ADEBAB"
         "MsmSig" = "8:_UNDEFINED"
@@ -574,6 +568,12 @@
         "Entry"
         {
         "MsmKey" = "8:_8BADC237D3364073A1AF89F8416C06C4"
+        "OwnerKey" = "8:_UNDEFINED"
+        "MsmSig" = "8:_UNDEFINED"
+        }
+        "Entry"
+        {
+        "MsmKey" = "8:_8D30E195829D40F6B180CFDD6CBDCB52"
         "OwnerKey" = "8:_UNDEFINED"
         "MsmSig" = "8:_UNDEFINED"
         }
@@ -939,6 +939,12 @@
         }
         "Entry"
         {
+        "MsmKey" = "8:_DD5E4E9B86CD4E76B1579B5F368FDF08"
+        "OwnerKey" = "8:_UNDEFINED"
+        "MsmSig" = "8:_UNDEFINED"
+        }
+        "Entry"
+        {
         "MsmKey" = "8:_DF1A750F5C64BFD3B0663216CD45BCBB"
         "OwnerKey" = "8:_E9ABFD765B7B68B5B374572D6A27DF5D"
         "MsmSig" = "8:_UNDEFINED"
@@ -1043,12 +1049,6 @@
         {
         "MsmKey" = "8:_FF12420E46914A7684FE0B4571E8DE51"
         "OwnerKey" = "8:_5F46DCD6F281464F872985BDD3ADEBAB"
-        "MsmSig" = "8:_UNDEFINED"
-        }
-        "Entry"
-        {
-        "MsmKey" = "8:_FF35AF17643D4E8F8EC84C3486F8E4D7"
-        "OwnerKey" = "8:_UNDEFINED"
         "MsmSig" = "8:_UNDEFINED"
         }
         "Entry"
@@ -2924,26 +2924,6 @@
             "IsDependency" = "11:TRUE"
             "IsolateTo" = "8:"
             }
-            "{1FB2D0AE-D3B9-43D4-B9DD-F88EC61E35DE}:_3BB0853F26894E2CB0E23F2352F2110A"
-            {
-            "SourcePath" = "8:..\\..\\..\\OfficeWordCopilot\\OfficeWordCopilot\\wwwroot\\css\\styles.css"
-            "TargetName" = "8:styles.css"
-            "Tag" = "8:"
-            "Folder" = "8:_4A13FDAB073849E6882D07E50A8767A4"
-            "Condition" = "8:"
-            "Transitive" = "11:FALSE"
-            "Vital" = "11:TRUE"
-            "ReadOnly" = "11:FALSE"
-            "Hidden" = "11:FALSE"
-            "System" = "11:FALSE"
-            "Permanent" = "11:FALSE"
-            "SharedLegacy" = "11:FALSE"
-            "PackageAs" = "3:1"
-            "Register" = "3:1"
-            "Exclude" = "11:FALSE"
-            "IsDependency" = "11:FALSE"
-            "IsolateTo" = "8:"
-            }
             "{9F6F8455-1EF1-4B85-886A-4223BCC8E7F7}:_454642AC4F2EF356B221088B7667221D"
             {
             "AssemblyRegister" = "3:1"
@@ -4379,6 +4359,26 @@
             "TargetName" = "8:MathJax_Size1-Regular.woff"
             "Tag" = "8:"
             "Folder" = "8:_C55DBEE6533F46F7A27A5F2231029AD7"
+            "Condition" = "8:"
+            "Transitive" = "11:FALSE"
+            "Vital" = "11:TRUE"
+            "ReadOnly" = "11:FALSE"
+            "Hidden" = "11:FALSE"
+            "System" = "11:FALSE"
+            "Permanent" = "11:FALSE"
+            "SharedLegacy" = "11:FALSE"
+            "PackageAs" = "3:1"
+            "Register" = "3:1"
+            "Exclude" = "11:FALSE"
+            "IsDependency" = "11:FALSE"
+            "IsolateTo" = "8:"
+            }
+            "{1FB2D0AE-D3B9-43D4-B9DD-F88EC61E35DE}:_8D30E195829D40F6B180CFDD6CBDCB52"
+            {
+            "SourcePath" = "8:..\\..\\..\\OfficeWordCopilot\\OfficeWordCopilot\\wwwroot\\css\\styles.css"
+            "TargetName" = "8:styles.css"
+            "Tag" = "8:"
+            "Folder" = "8:_4A13FDAB073849E6882D07E50A8767A4"
             "Condition" = "8:"
             "Transitive" = "11:FALSE"
             "Vital" = "11:TRUE"
@@ -5935,6 +5935,26 @@
             "IsDependency" = "11:TRUE"
             "IsolateTo" = "8:"
             }
+            "{1FB2D0AE-D3B9-43D4-B9DD-F88EC61E35DE}:_DD5E4E9B86CD4E76B1579B5F368FDF08"
+            {
+            "SourcePath" = "8:..\\..\\..\\OfficeWordCopilot\\OfficeWordCopilot\\wwwroot\\js\\chat.js"
+            "TargetName" = "8:chat.js"
+            "Tag" = "8:"
+            "Folder" = "8:_78F53BC274F64D67B86D96C3A51489A5"
+            "Condition" = "8:"
+            "Transitive" = "11:FALSE"
+            "Vital" = "11:TRUE"
+            "ReadOnly" = "11:FALSE"
+            "Hidden" = "11:FALSE"
+            "System" = "11:FALSE"
+            "Permanent" = "11:FALSE"
+            "SharedLegacy" = "11:FALSE"
+            "PackageAs" = "3:1"
+            "Register" = "3:1"
+            "Exclude" = "11:FALSE"
+            "IsDependency" = "11:FALSE"
+            "IsolateTo" = "8:"
+            }
             "{9F6F8455-1EF1-4B85-886A-4223BCC8E7F7}:_DF1A750F5C64BFD3B0663216CD45BCBB"
             {
             "AssemblyRegister" = "3:1"
@@ -6460,26 +6480,6 @@
             "IsDependency" = "11:TRUE"
             "IsolateTo" = "8:"
             }
-            "{1FB2D0AE-D3B9-43D4-B9DD-F88EC61E35DE}:_FF35AF17643D4E8F8EC84C3486F8E4D7"
-            {
-            "SourcePath" = "8:..\\..\\..\\OfficeWordCopilot\\OfficeWordCopilot\\wwwroot\\js\\chat.js"
-            "TargetName" = "8:chat.js"
-            "Tag" = "8:"
-            "Folder" = "8:_78F53BC274F64D67B86D96C3A51489A5"
-            "Condition" = "8:"
-            "Transitive" = "11:FALSE"
-            "Vital" = "11:TRUE"
-            "ReadOnly" = "11:FALSE"
-            "Hidden" = "11:FALSE"
-            "System" = "11:FALSE"
-            "Permanent" = "11:FALSE"
-            "SharedLegacy" = "11:FALSE"
-            "PackageAs" = "3:1"
-            "Register" = "3:1"
-            "Exclude" = "11:FALSE"
-            "IsDependency" = "11:FALSE"
-            "IsolateTo" = "8:"
-            }
         }
         "FileType"
         {
@@ -6891,7 +6891,7 @@
         "Name" = "8:Microsoft Visual Studio"
         "ProductName" = "8:WordCopilotChat-win-x64"
         "ProductCode" = "8:{A55A0D29-968C-43F0-B837-5BA445FD3DEE}"
-        "PackageCode" = "8:{35139767-3C5F-40ED-9886-C236A5C08BED}"
+        "PackageCode" = "8:{63ECE400-C033-4A93-9F52-9E265C1783A2}"
         "UpgradeCode" = "8:{13A4DBFD-1018-42C8-85CF-872932CF3088}"
         "AspNetVersion" = "8:2.0.50727.0"
         "RestartWWWService" = "11:FALSE"
